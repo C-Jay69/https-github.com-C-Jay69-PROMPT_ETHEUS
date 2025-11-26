@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GeneratorParams, GeneratedPrompt } from '../types';
 import { generatePromptFromIdeas } from '../services/geminiService';
 import { Button } from './ui/Button';
@@ -18,9 +18,44 @@ export const PromptGenerator: React.FC<Props> = ({ onSave }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [results, setResults] = useState<GeneratedPrompt[]>([]);
+  const [history, setHistory] = useState<GeneratorParams[]>([]);
+
+  // Load history on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('prompt_etheus_generator_history');
+    if (saved) {
+      try {
+        setHistory(JSON.parse(saved));
+      } catch (e) {
+        console.error("Failed to parse generator history");
+      }
+    }
+  }, []);
+
+  const addToHistory = (newParams: GeneratorParams) => {
+    setHistory(prev => {
+      // Avoid duplicates at top of stack
+      if (prev.length > 0 && JSON.stringify(prev[0]) === JSON.stringify(newParams)) {
+        return prev;
+      }
+      const updated = [newParams, ...prev].slice(0, 10);
+      localStorage.setItem('prompt_etheus_generator_history', JSON.stringify(updated));
+      return updated;
+    });
+  };
+
+  const clearHistory = () => {
+    if (window.confirm("Are you sure you want to clear your configuration history?")) {
+      setHistory([]);
+      localStorage.removeItem('prompt_etheus_generator_history');
+    }
+  };
 
   const handleGenerate = async () => {
     if (!params.topic || !params.goal) return;
+    
+    addToHistory(params);
+    
     setIsLoading(true);
     try {
       const generated = await generatePromptFromIdeas(params);
@@ -35,7 +70,7 @@ export const PromptGenerator: React.FC<Props> = ({ onSave }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 h-full">
       {/* Input Panel */}
-      <div className="lg:col-span-4 space-y-6 bg-slate-900/50 p-6 rounded-xl border border-slate-800 h-fit">
+      <div className="lg:col-span-4 space-y-6 bg-slate-900/50 p-6 rounded-xl border border-slate-800 h-fit flex flex-col">
         <div>
           <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <svg className="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
@@ -132,6 +167,38 @@ export const PromptGenerator: React.FC<Props> = ({ onSave }) => {
             </Button>
           </div>
         </div>
+        
+        {/* History Section */}
+        {history.length > 0 && (
+          <div className="pt-6 border-t border-slate-800 animate-fade-in">
+             <div className="flex items-center justify-between mb-3">
+               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                 Recent History
+               </h3>
+               <button onClick={clearHistory} className="text-[10px] text-slate-600 hover:text-red-400 transition-colors">Clear All</button>
+             </div>
+             <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1 custom-scrollbar">
+               {history.map((item, idx) => (
+                 <div 
+                    key={idx} 
+                    onClick={() => setParams(item)}
+                    className="group p-3 rounded-lg bg-slate-800/40 border border-slate-800 hover:bg-slate-800 hover:border-indigo-500/30 cursor-pointer transition-all"
+                 >
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="font-medium text-slate-300 text-sm truncate w-full pr-2 group-hover:text-indigo-300 transition-colors">{item.topic}</span>
+                      <svg className="w-3.5 h-3.5 text-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                    </div>
+                    <p className="text-xs text-slate-500 truncate mb-2">{item.goal}</p>
+                    <div className="flex gap-1.5 flex-wrap">
+                      <span className="text-[10px] bg-slate-900/80 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800">{item.targetModel}</span>
+                      <span className="text-[10px] bg-slate-900/80 text-slate-400 px-1.5 py-0.5 rounded border border-slate-800">{item.format}</span>
+                    </div>
+                 </div>
+               ))}
+             </div>
+          </div>
+        )}
       </div>
 
       {/* Results Panel */}
